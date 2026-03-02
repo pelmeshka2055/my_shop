@@ -4,8 +4,8 @@ import express from 'express';
 import bcrypt from 'bcrypt'; //для генерации сиоли и хеширования пароля
 import {registerValidation} from './validations/auth.js'; //проверяем на соответствие требованиям
 import { validationResult } from 'express-validator' //смотрит ошибки при валидации
-import db from './db.js'; //для работы с базой данн
-import "dotenv/config"
+import db from './db.js'; //для работы с базой данных
+import "dotenv/config"//для того чтобы не спиздили все пароли
 
 const app = express();
 app.use(express.json());
@@ -30,34 +30,67 @@ const PORT = 5001;
 // });
 
 
-
-
-
-
-
-
 //тут на главное странице при запросе get мы будем получать req - запрос пользователя, а res - ответ от сервера, который мы отправляем пользователю
 app.get('/', (req, res) => {
-    console.log(res.query);
+    console.log(req.query);
     res.status(200).json("HELLO");
 });
-//тут прина главное странице при запросе post мы будем получать req - запрос пользователя, а res - ответ от сервера, который мы отправляем пользователю, в формате json 
+
+//тут при POST запросе мы получаем данные от пользователя
 app.post('/', (req, res) => {
     console.log(req.body);
     res.status(200).json({message: "Data received"});
 });
 
+
 //логин
 app.post('/auth/login', async(req, res) => {
     try {
-        const {email, password} = req.body;
-        
+        //проверка на то есть ли вообще такой пользователь
+        const result = await db.query(
+            'SELECT * FROM person WHERE email = $1',
+            [req.body.email]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "Пользователь не найден" }); //ВАЖНО
+        }
+
+        //достаем пользователя из результата запроса
+        const userData = result.rows[0];
+
+        //сравниваем пароли которые нам прислали и который есть в бд.
+        const isValidPassword = await bcrypt.compare(
+            req.body.password,
+            userData.password
+        );
+        //если пароль не верны то ошибка
+        if (!isValidPassword){
+            return res.status(400).json({message: "Неверный логин или пароль"}); 
+        }
+
+        // создаем токен 
+        const token = jwt.sign({
+            id: userData.id,
+        }, process.env.JWT_KEY,
+        {expiresIn: '30d'});
+
+        //убираем пароль из ответа
+        const { password, ...user } = userData;
+
+        //отправляем ответ пользователю
+        res.json({
+            ...user,
+            token,
+        });
+
     } catch (e){
         console.log(e);
-        res.status(500).json({message: "Server error"});
-
+        res.status(500).json({message: "Server error, login"});
     }
 });
+
+
 //регистрация
 app.post('/auth/register',registerValidation, async(req, res) => {
     try{
@@ -66,39 +99,44 @@ app.post('/auth/register',registerValidation, async(req, res) => {
         if (!errors.isEmpty()) {
             return res.status(400).json({ errors: errors.array() });
         }
+
         const {name, email, password} = req.body;
         const balance = 0;
-
 
         //пароль и соль
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        //смоздаем нового пользователя в базе данных
+        //создаем нового пользователя в базе данных
         const newPerson = await db.query(
             'INSERT INTO person (name, email, password, balance) VALUES ($1, $2, $3, $4) RETURNING *',
             [name, email, hashedPassword, balance]
         );
-        res.json(newPerson.rows[0]);
 
+        //убираем пароль из ответа, чтобы не отправлять его пользователю
+        const { password: _, ...userData } = newPerson.rows[0];
 
         //создание и отправка токена
         const token = jwt.sign({
-            id: user.id,
+            id: userData.id,
         }, process.env.JWT_KEY,
         {expiresIn: '30d'});
-        //убираем пароль из ответа, чтобы не отправлять его пользователю
-        const { password: _, ...userData } = user._doc;
-        //создаем ответ, который отправляем пользователю, в котором есть данные пользователя и токен
+
+        //создаем ответ, который отправляем пользователю
         res.json({
-            ...user._doc,
-            token});
+            ...userData,
+            token,
+        });
+
     } catch (e) {
         console.log(e);
-        res.status(500).json({message: "Server error"});
-    }});
+        res.status(500).json({message: "Server error, register"});
+    }
+});
+
 
 app.listen(PORT, () => {
     console.log(`Server started on port ${PORT}`);
 });
+
 // app.use('/api', userRouter);
