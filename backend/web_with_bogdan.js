@@ -48,13 +48,15 @@ app.post('/', (req, res) => {
 });
 
 //логин
-app.post('/auth/login', (req, res) => {
-    console.log(req.body);
-    const token = jwt.sign({
-        name: req.body.name,
-        email: req.body.email },
-        process.env.JWT_KEY);
-    res.json({token});
+app.post('/auth/login', async(req, res) => {
+    try {
+        const {email, password} = req.body;
+        
+    } catch (e){
+        console.log(e);
+        res.status(500).json({message: "Server error"});
+
+    }
 });
 //регистрация
 app.post('/auth/register',registerValidation, async(req, res) => {
