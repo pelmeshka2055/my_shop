@@ -97,23 +97,22 @@ app.post('/auth/register',registerValidation, async(req, res) => {
         //проверяем на ошибки валидации
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            console.log(555)
             return res.status(400).json({ errors: errors.array() });
         }
 
-        console.log(123)
 
         const {name, email, password} = req.body;
         const balance = 0;
         //проверка на то что есть ли эмаил в базе данных с таким емаилом
         const isEmail = await db.query(
-            'SELECT 1 FROM person WHERE email= $1',
+            'SELECT * FROM person WHERE email=$1',
             [email]
         );
-        if (isEmail == 1){
-            return res.status(400).json({ message: 'Email is in use'})
+        if (isEmail.rows[0]){
+            return res.status(400).json({ message: 'Email is in use'});
+            return;
         }
-
+        
         //пароль и соль
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
@@ -141,7 +140,7 @@ app.post('/auth/register',registerValidation, async(req, res) => {
 
     } catch (e) {
         console.log(e);
-        res.status(500).json({message: "Server error, register"});
+        res.status(501).json({message: "Server error, register"});
     }
 });
 
