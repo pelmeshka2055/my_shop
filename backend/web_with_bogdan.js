@@ -135,7 +135,12 @@ app.post('/auth/register',registerValidation, async(req, res) => {
 });
 
 
-app.listen(PORT, () => {
+app.listen(PORT, (err) => {
+    if (err){
+        console.log("Server start error: ", err);
+        return;
+    }
+
     console.log(`Server started on port ${PORT}`);
 });
 
